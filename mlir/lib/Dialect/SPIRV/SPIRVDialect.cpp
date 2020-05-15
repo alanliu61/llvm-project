@@ -115,7 +115,7 @@ struct SPIRVInlinerInterface : public DialectInlinerInterface {
 
 SPIRVDialect::SPIRVDialect(MLIRContext *context)
     : Dialect(getDialectNamespace(), context) {
-  addTypes<ArrayType, ImageType, PointerType, RuntimeArrayType, StructType>();
+  addTypes<ArrayType, ImageType, SampledImageType, PointerType, RuntimeArrayType, StructType>();
 
   addAttributes<InterfaceVarABIAttr, TargetEnvAttr, VerCapExtAttr>();
 
@@ -570,6 +570,10 @@ static void print(ImageType type, DialectAsmPrinter &os) {
      << stringifyImageFormat(type.getImageFormat()) << ">";
 }
 
+static void print(SampledImageType type, DialectAsmPrinter &os) {
+  os << "spledimage<" << type.getImageType() << ">";
+}
+
 static void print(StructType type, DialectAsmPrinter &os) {
   os << "struct<";
   auto printMember = [&](unsigned i) {
@@ -608,6 +612,9 @@ void SPIRVDialect::printType(Type type, DialectAsmPrinter &os) const {
     return;
   case TypeKind::Image:
     print(type.cast<ImageType>(), os);
+    return;
+  case TypeKind::SampledImage:
+    print(type.cast<SampledImageType>(), os);
     return;
   case TypeKind::Struct:
     print(type.cast<StructType>(), os);

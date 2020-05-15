@@ -448,6 +448,35 @@ void ImageType::getCapabilities(
 }
 
 //===----------------------------------------------------------------------===//
+// SampledImageType
+//===----------------------------------------------------------------------===//
+
+struct spirv::detail::SampledImageTypeStorage : public TypeStorage {
+  using KeyTy = Type;
+
+  SampledImageTypeStorage(const KeyTy &key): imageType{key} {}
+
+
+  bool operator==(const KeyTy &key) const {
+    return key == KeyTy(imageType);
+  }
+
+  static SampledImageTypeStorage *construct(TypeStorageAllocator &allocator,
+                                     const KeyTy &key) {
+    return new (allocator.allocate<SampledImageTypeStorage>()) 
+                        SampledImageTypeStorage(key);
+  }
+
+  Type imageType;
+};
+
+SampledImageType SampledImageType::get(Type imageType) {
+  return Base::get(imageType.getContext(), TypeKind::SampledImage, imageType);
+}
+
+Type SampledImageType::getImageType() const { return getImpl()->imageType; }
+
+//===----------------------------------------------------------------------===//
 // PointerType
 //===----------------------------------------------------------------------===//
 

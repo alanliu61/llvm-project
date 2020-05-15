@@ -55,6 +55,7 @@ SmallVector<Capability, 0> getRecursiveImpliedCapabilities(Capability cap);
 namespace detail {
 struct ArrayTypeStorage;
 struct ImageTypeStorage;
+struct SampledImageTypeStorage;
 struct PointerTypeStorage;
 struct RuntimeArrayTypeStorage;
 struct StructTypeStorage;
@@ -64,6 +65,7 @@ namespace TypeKind {
 enum Kind {
   Array = Type::FIRST_SPIRV_TYPE,
   Image,
+  SampledImage,
   Pointer,
   RuntimeArray,
   Struct,
@@ -217,10 +219,11 @@ class SampledImageType
 public:
   using Base::Base;
 
-  static bool kindof(unsigned kind) { return kind == TypeKind::Image; }
+  static bool kindof(unsigned kind) { return kind == TypeKind::SampledImage; }
 
   static SampledImageType get(Type imageType);
 
+  Type getImageType() const;
 };
 
 // SPIR-V pointer type
