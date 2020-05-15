@@ -10,6 +10,7 @@
 //
 //===----------------------------------------------------------------------===//
 
+#include <iostream>
 #include "mlir/Dialect/SPIRV/Serialization.h"
 
 #include "mlir/Dialect/SPIRV/SPIRVAttributes.h"
@@ -1031,6 +1032,36 @@ Serializer::prepareBasicType(Location loc, Type type, uint32_t resultID,
       operands.push_back(elementCountID);
     }
     return processTypeDecoration(loc, arrayType, resultID);
+  }
+
+  if (auto imageType = type.dyn_cast<spirv::ImageType>()){
+    typeEnum = spirv::Opcode::OpTypeImage;
+    uint32_t sampledTypeID = 0;
+    if (failed(processType(loc, imageType.getElementType(),
+                            sampledTypeID))) {
+      return failure();
+    }
+    operands.push_back(sampledTypeID);
+
+    uint32_t dim = static_cast<unsigned>(imageType.getDim());
+    operands.push_back(dim);
+
+    uint32_t depthInfo = static_cast<unsigned>(imageType.getDepthInfo());
+    operands.push_back(depthInfo);
+
+    uint32_t arrayedInfo = static_cast<unsigned>(imageType.getArrayedInfo());
+    operands.push_back(arrayedInfo);
+
+    uint32_t samplingInfo = static_cast<unsigned>(imageType.getSamplingInfo());
+    operands.push_back(samplingInfo);
+
+    uint32_t samplerUseInfo = static_cast<unsigned>(imageType.getSamplerUseInfo());
+    operands.push_back(samplerUseInfo);
+
+    uint32_t imageFormat = static_cast<unsigned>(imageType.getImageFormat());
+    operands.push_back(imageFormat);
+
+    return success();
   }
 
   if (auto ptrType = type.dyn_cast<spirv::PointerType>()) {

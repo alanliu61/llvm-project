@@ -10,6 +10,7 @@
 //
 //===----------------------------------------------------------------------===//
 
+#include <iostream>
 #include "mlir/Dialect/SPIRV/SPIRVOps.h"
 
 #include "mlir/Dialect/SPIRV/SPIRVAttributes.h"
@@ -70,6 +71,8 @@ static bool isDirectInModuleLikeOp(Operation *op) {
 }
 
 static LogicalResult extractValueFromConstOp(Operation *op, int32_t &value) {
+  
+  std::cerr << "Extracting value from const ================" << std::endl;
   auto constOp = dyn_cast_or_null<spirv::ConstantOp>(op);
   if (!constOp) {
     return failure();
@@ -79,7 +82,9 @@ static LogicalResult extractValueFromConstOp(Operation *op, int32_t &value) {
   if (!integerValueAttr) {
     return failure();
   }
+  std::cerr << "prior ================" << std::endl;
   value = integerValueAttr.getInt();
+  std::cerr << "passed ================" << std::endl;
   return success();
 }
 
@@ -732,6 +737,7 @@ static LogicalResult verifyShiftOp(Operation *op) {
 //===----------------------------------------------------------------------===//
 
 static Type getElementPtrType(Type type, ValueRange indices, Location baseLoc) {
+  std::cerr << "getElePTR =========================" << std::endl;
   if (indices.empty()) {
     emitError(baseLoc, "'spv.AccessChain' op expected at least "
                        "one index ");
@@ -760,6 +766,7 @@ static Type getElementPtrType(Type type, ValueRange indices, Location baseLoc) {
     }
     index = 0;
     if (resultType.isa<spirv::StructType>()) {
+      std::cerr << "this is STRUCT =========================" << std::endl;
       Operation *op = indexSSA.getDefiningOp();
       if (!op) {
         emitError(baseLoc, "'spv.AccessChain' op index must be an "

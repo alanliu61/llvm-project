@@ -211,6 +211,18 @@ public:
                        Optional<spirv::StorageClass> storage = llvm::None);
 };
 
+// SPIR-V image type
+class SampledImageType
+    : public Type::TypeBase<SampledImageType, SPIRVType, detail::SampledImageTypeStorage> {
+public:
+  using Base::Base;
+
+  static bool kindof(unsigned kind) { return kind == TypeKind::Image; }
+
+  static SampledImageType get(Type imageType);
+
+};
+
 // SPIR-V pointer type
 class PointerType : public Type::TypeBase<PointerType, SPIRVType,
                                           detail::PointerTypeStorage> {

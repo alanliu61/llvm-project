@@ -10,6 +10,7 @@
 //
 //===----------------------------------------------------------------------===//
 
+#include <iostream> // for testing purpose
 #include "mlir/Dialect/SPIRV/Serialization.h"
 
 #include "mlir/Dialect/SPIRV/SPIRVAttributes.h"
@@ -214,6 +215,8 @@ private:
   LogicalResult processType(spirv::Opcode opcode, ArrayRef<uint32_t> operands);
 
   LogicalResult processArrayType(ArrayRef<uint32_t> operands);
+
+  LogicalResult processImageType(ArrayRef<uint32_t> operands);
 
   LogicalResult processFunctionType(ArrayRef<uint32_t> operands);
 
@@ -729,6 +732,10 @@ LogicalResult Deserializer::processDecoration(ArrayRef<uint32_t> words) {
     decorations[words[0]].set(
         symbol, opBuilder.getI32IntegerAttr(static_cast<int32_t>(words[2])));
     break;
+  case spirv::Decoration::Location:
+    break;
+  case spirv::Decoration::NonReadable:
+    break;
   default:
     return emitError(unknownLoc, "unhandled Decoration : '") << decorationName;
   }
@@ -1158,6 +1165,10 @@ LogicalResult Deserializer::processType(spirv::Opcode opcode,
   } break;
   case spirv::Opcode::OpTypeArray:
     return processArrayType(operands);
+  case spirv::Opcode::OpTypeImage:
+    return processImageType(operands);
+  case spirv::Opcode::OpTypeSampledImage:
+    return processSampledImageType(operands);
   case spirv::Opcode::OpTypeFunction:
     return processFunctionType(operands);
   case spirv::Opcode::OpTypeRuntimeArray:
@@ -1199,6 +1210,59 @@ LogicalResult Deserializer::processArrayType(ArrayRef<uint32_t> operands) {
 
   typeMap[operands[0]] = spirv::ArrayType::get(
       elementTy, count, typeDecorations.lookup(operands[0]));
+  return success();
+}
+
+LogicalResult Deserializer::processImageType(ArrayRef<uint32_t> operands) {
+  // TODO add support for Access Qualifier; support variable num of operands
+  assert(!operands.empty() && "No operands for processing image type");
+  if (operands.size() != 8) {
+    return emitError(unknownLoc, "OpTypeImage must have seven parameters");
+  }
+
+  // TODO add check to ensure that the type is either OpTypeVoid or a scalar numerical type?
+  Type elementTy = getType(operands[1]);
+  if (!elementTy) {
+    return emitError(unknownLoc, "OpTypeImage references undefined <id> ")
+           << operands[1];
+  }
+
+  // TODO add checks to ensure the value returned is not llvm::None?
+  auto dim = spirv::symbolizeDim(operands[2]);
+  auto samplerUseInfo = spirv::symbolizeImageSamplerUseInfo(operands[6]);
+  auto format = spirv::symbolizeImageFormat(operands[7]);
+  if (dim == spirv::Dim::SubpassData) {
+    // TODO check that the executionModel must also be Fragment
+    if (samplerUseInfo != spirv::ImageSamplerUseInfo::NoSampler ||
+          format != spirv::ImageFormat::Unknown) {
+        return emitError(unknownLoc, "OpTypeImage with Dim: SubpassData must have "
+          "Sampled: NoSampler and ImageFormat: Unknown");
+      }
+  }
+
+  auto depthInfo = spirv::symbolizeImageDepthInfo(operands[3]).getValue();
+  auto arrayedInfo = spirv::symbolizeImageArrayedInfo(operands[4]).getValue();
+  auto samplingInfo = spirv::symbolizeImageSamplingInfo(operands[5]).getValue();
+
+  typeMap[operands[0]] = spirv::ImageType::get(elementTy, dim.getValue(), depthInfo, arrayedInfo,
+                                               samplingInfo, samplerUseInfo.getValue(), format.getValue());
+  return success();
+}
+
+LogicalResult Deserializer::processSampledImageType(ArrayRef<uint32_t> operands) {
+  assert(!operands.empty() && "No operands for processing sampled image type");
+  if (operands.size() != 2) {
+    return emitError(unknownLoc, "OpTypeSampledImage must have one parameter");
+  }
+
+  // TODO add check that this is OpTypeImage?
+  Type elementTy = getType(operands[1]);
+  if (!elementTy) {
+    return emitError(unknownLoc, "OpTypeSampledImage references undefined <id> ")
+           << operands[1];
+  }
+
+  typeMap[operands[0]] = spirv::SampledImageType::get(elementTy);
   return success();
 }
 
@@ -2193,6 +2257,8 @@ LogicalResult Deserializer::processInstruction(spirv::Opcode opcode,
   case spirv::Opcode::OpTypeInt:
   case spirv::Opcode::OpTypeFloat:
   case spirv::Opcode::OpTypeVector:
+  case spirv::Opcode::OpTypeImage:
+  case spirv::Opcode::OpTypeSampledImage:
   case spirv::Opcode::OpTypeArray:
   case spirv::Opcode::OpTypeFunction:
   case spirv::Opcode::OpTypeRuntimeArray:
