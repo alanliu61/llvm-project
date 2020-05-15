@@ -429,6 +429,22 @@ static Type parseImageType(SPIRVDialect const &dialect,
   return ImageType::get(value.getValue());
 }
 
+// sampledimage-type ::= `!spv.sampledimage<` element-type `>`
+static Type parseSampledImageType(SPIRVDialect const &dialect,
+                           DialectAsmParser &parser) {
+  if (parser.parseLess())
+    return Type();
+
+  auto parseVal = parseAndVerify<Type>(dialect, parser);
+
+  if (!parseVal)
+    return Type();
+  
+  if (parser.parseGreater())
+    return Type();
+  return SampledImageType::get(parseVal.getValue());
+ }
+
 // Parse decorations associated with a member.
 static ParseResult parseStructMemberDecorations(
     SPIRVDialect const &dialect, DialectAsmParser &parser,
@@ -527,6 +543,8 @@ Type SPIRVDialect::parseType(DialectAsmParser &parser) const {
     return parseArrayType(*this, parser);
   if (keyword == "image")
     return parseImageType(*this, parser);
+  if (keyword == "sampledimage")
+    return parseSampledImageType(*this, parser);
   if (keyword == "ptr")
     return parsePointerType(*this, parser);
   if (keyword == "rtarray")
@@ -571,7 +589,7 @@ static void print(ImageType type, DialectAsmPrinter &os) {
 }
 
 static void print(SampledImageType type, DialectAsmPrinter &os) {
-  os << "spledimage<" << type.getImageType() << ">";
+  os << "sampledimage<" << type.getImageType() << ">";
 }
 
 static void print(StructType type, DialectAsmPrinter &os) {

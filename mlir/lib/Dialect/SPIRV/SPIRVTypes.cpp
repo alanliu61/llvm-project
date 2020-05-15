@@ -456,7 +456,6 @@ struct spirv::detail::SampledImageTypeStorage : public TypeStorage {
 
   SampledImageTypeStorage(const KeyTy &key): imageType{key} {}
 
-
   bool operator==(const KeyTy &key) const {
     return key == KeyTy(imageType);
   }

@@ -1064,6 +1064,18 @@ Serializer::prepareBasicType(Location loc, Type type, uint32_t resultID,
     return success();
   }
 
+  if (auto sampledImageType = type.dyn_cast<spirv::SampledImageType>()){
+    typeEnum = spirv::Opcode::OpTypeSampledImage;
+    uint32_t imageTypeID = 0;
+    if (failed(processType(loc, sampledImageType.getImageType(),
+                            imageTypeID))) {
+      return failure();
+    }
+    operands.push_back(imageTypeID);
+
+    return success();
+  }
+
   if (auto ptrType = type.dyn_cast<spirv::PointerType>()) {
     uint32_t pointeeTypeID = 0;
     if (failed(processType(loc, ptrType.getPointeeType(), pointeeTypeID))) {
