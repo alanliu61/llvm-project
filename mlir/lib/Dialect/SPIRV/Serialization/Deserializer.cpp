@@ -737,6 +737,12 @@ LogicalResult Deserializer::processDecoration(ArrayRef<uint32_t> words) {
         symbol, opBuilder.getI32IntegerAttr(static_cast<int32_t>(words[2])));
     break;
   case spirv::Decoration::Location:
+    if (words.size() != 3) {
+      return emitError(unknownLoc, "OpDecoration with ")
+             << decorationName << "needs a single integer literal";
+    }
+    decorations[words[0]].set(
+        symbol, opBuilder.getI32IntegerAttr(static_cast<int32_t>(words[2])));
     break;
   case spirv::Decoration::NonReadable:
     break;
