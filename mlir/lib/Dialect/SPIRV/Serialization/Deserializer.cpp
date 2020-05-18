@@ -692,6 +692,13 @@ LogicalResult Deserializer::processDecoration(ArrayRef<uint32_t> words) {
   auto symbol = opBuilder.getIdentifier(attrName);
   switch (static_cast<spirv::Decoration>(words[1])) {
   case spirv::Decoration::DescriptorSet:
+    if (words.size() != 3) {
+      return emitError(unknownLoc, "OpDecoration with ")
+             << decorationName << "needs a single integer literal";
+    }
+    decorations[words[0]].set(
+        symbol, opBuilder.getI32IntegerAttr(static_cast<int32_t>(words[2])));
+    break;
   case spirv::Decoration::Binding:
     if (words.size() != 3) {
       return emitError(unknownLoc, "OpDecorate with ")
@@ -745,6 +752,18 @@ LogicalResult Deserializer::processDecoration(ArrayRef<uint32_t> words) {
         symbol, opBuilder.getI32IntegerAttr(static_cast<int32_t>(words[2])));
     break;
   case spirv::Decoration::NonReadable:
+    if (words.size() != 2) {
+      return emitError(unknownLoc, "OpDecoration with ")
+             << decorationName << "needs a single target <id>";
+    }
+    decorations[words[0]].set(symbol, opBuilder.getUnitAttr());
+    break;
+  case spirv::Decoration::NonWritable:
+    if (words.size() != 2) {
+      return emitError(unknownLoc, "OpDecoration with ")
+             << decorationName << "needs a single target <id>";
+    }
+    decorations[words[0]].set(symbol, opBuilder.getUnitAttr());
     break;
   default:
     return emitError(unknownLoc, "unhandled Decoration : '") << decorationName;
