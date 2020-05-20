@@ -159,6 +159,7 @@ void ArrayType::getCapabilities(
 bool CompositeType::classof(Type type) {
   switch (type.getKind()) {
   case TypeKind::Array:
+  case TypeKind::CooperativeMatrix:
   case TypeKind::RuntimeArray:
   case TypeKind::Struct:
     return true;
@@ -179,6 +180,8 @@ Type CompositeType::getElementType(unsigned index) const {
   switch (getKind()) {
   case spirv::TypeKind::Array:
     return cast<ArrayType>().getElementType();
+  case spirv::TypeKind::CooperativeMatrix:
+    return cast<CooperativeMatrixNVType>().getElementType();
   case spirv::TypeKind::RuntimeArray:
     return cast<RuntimeArrayType>().getElementType();
   case spirv::TypeKind::Struct:
@@ -194,6 +197,9 @@ unsigned CompositeType::getNumElements() const {
   switch (getKind()) {
   case spirv::TypeKind::Array:
     return cast<ArrayType>().getNumElements();
+  case spirv::TypeKind::CooperativeMatrix:
+    return cast<CooperativeMatrixNVType>().getRows() *
+           cast<CooperativeMatrixNVType>().getColumns();
   case spirv::TypeKind::RuntimeArray:
     llvm_unreachable(
         "invalid to query number of elements of spirv::RuntimeArray type");
@@ -212,6 +218,9 @@ void CompositeType::getExtensions(
   switch (getKind()) {
   case spirv::TypeKind::Array:
     cast<ArrayType>().getExtensions(extensions, storage);
+    break;
+  case spirv::TypeKind::CooperativeMatrix:
+    cast<CooperativeMatrixNVType>().getExtensions(extensions, storage);
     break;
   case spirv::TypeKind::RuntimeArray:
     cast<RuntimeArrayType>().getExtensions(extensions, storage);
@@ -235,6 +244,9 @@ void CompositeType::getCapabilities(
   case spirv::TypeKind::Array:
     cast<ArrayType>().getCapabilities(capabilities, storage);
     break;
+  case spirv::TypeKind::CooperativeMatrix:
+    cast<CooperativeMatrixNVType>().getCapabilities(capabilities, storage);
+    break;
   case spirv::TypeKind::RuntimeArray:
     cast<RuntimeArrayType>().getCapabilities(capabilities, storage);
     break;
@@ -248,6 +260,70 @@ void CompositeType::getCapabilities(
   default:
     llvm_unreachable("invalid composite type");
   }
+}
+
+//===----------------------------------------------------------------------===//
+// CooperativeMatrixType
+//===----------------------------------------------------------------------===//
+
+struct spirv::detail::CooperativeMatrixTypeStorage : public TypeStorage {
+  using KeyTy = std::tuple<Type, Scope, unsigned, unsigned>;
+
+  static CooperativeMatrixTypeStorage *
+  construct(TypeStorageAllocator &allocator, const KeyTy &key) {
+    return new (allocator.allocate<CooperativeMatrixTypeStorage>())
+        CooperativeMatrixTypeStorage(key);
+  }
+
+  bool operator==(const KeyTy &key) const {
+    return key == KeyTy(elementType, getScope(), rows, columns);
+  }
+
+  CooperativeMatrixTypeStorage(const KeyTy &key)
+      : TypeStorage(static_cast<unsigned>(std::get<1>(key))),
+        elementType(std::get<0>(key)), rows(std::get<2>(key)),
+        columns(std::get<3>(key)) {}
+
+  Scope getScope() const { return static_cast<Scope>(getSubclassData()); }
+
+  Type elementType;
+  unsigned rows;
+  unsigned columns;
+};
+
+CooperativeMatrixNVType CooperativeMatrixNVType::get(Type elementType,
+                                                     Scope scope, unsigned rows,
+                                                     unsigned columns) {
+  return Base::get(elementType.getContext(), TypeKind::CooperativeMatrix,
+                   elementType, scope, rows, columns);
+}
+
+Type CooperativeMatrixNVType::getElementType() const {
+  return getImpl()->elementType;
+}
+
+Scope CooperativeMatrixNVType::getScope() const {
+  return getImpl()->getScope();
+}
+
+unsigned CooperativeMatrixNVType::getRows() const { return getImpl()->rows; }
+
+unsigned CooperativeMatrixNVType::getColumns() const {
+  return getImpl()->columns;
+}
+
+void CooperativeMatrixNVType::getExtensions(
+    SPIRVType::ExtensionArrayRefVector &extensions,
+    Optional<StorageClass> storage) {
+  getElementType().cast<SPIRVType>().getExtensions(extensions, storage);
+  extensions.push_back(Extension::SPV_NV_cooperative_matrix);
+}
+
+void CooperativeMatrixNVType::getCapabilities(
+    SPIRVType::CapabilityArrayRefVector &capabilities,
+    Optional<StorageClass> storage) {
+  getElementType().cast<SPIRVType>().getCapabilities(capabilities, storage);
+  capabilities.push_back(Capability::CooperativeMatrixNV);
 }
 
 //===----------------------------------------------------------------------===//
