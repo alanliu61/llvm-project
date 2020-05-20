@@ -218,13 +218,11 @@ private:
 
   LogicalResult processArrayType(ArrayRef<uint32_t> operands);
 
-<<<<<<< HEAD
   LogicalResult processImageType(ArrayRef<uint32_t> operands);
 
   LogicalResult processSampledImageType(ArrayRef<uint32_t> operands);
-=======
+
   LogicalResult processCooperativeMatrixType(ArrayRef<uint32_t> operands);
->>>>>>> e8f6b0e583cbf97a08c26b2219faaa5e433a67ab
 
   LogicalResult processFunctionType(ArrayRef<uint32_t> operands);
 
@@ -1198,12 +1196,15 @@ LogicalResult Deserializer::processType(spirv::Opcode opcode,
   } break;
   case spirv::Opcode::OpTypeArray:
     return processArrayType(operands);
+<<<<<<< HEAD
   case spirv::Opcode::OpTypeImage:
     return processImageType(operands);
   case spirv::Opcode::OpTypeSampledImage:
     return processSampledImageType(operands);
+=======
   case spirv::Opcode::OpTypeCooperativeMatrixNV:
     return processCooperativeMatrixType(operands);
+>>>>>>> e8f6b0e583cbf97a08c26b2219faaa5e433a67ab
   case spirv::Opcode::OpTypeFunction:
     return processFunctionType(operands);
   case spirv::Opcode::OpTypeRuntimeArray:
