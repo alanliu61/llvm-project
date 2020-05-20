@@ -531,6 +531,7 @@ static Type parseStructType(SPIRVDialect const &dialect,
 // spirv-type ::= array-type
 //              | element-type
 //              | image-type
+//              | sampledimage-type
 //              | pointer-type
 //              | runtime-array-type
 //              | struct-type

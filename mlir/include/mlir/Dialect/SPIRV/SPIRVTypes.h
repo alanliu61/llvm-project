@@ -213,7 +213,7 @@ public:
                        Optional<spirv::StorageClass> storage = llvm::None);
 };
 
-// SPIR-V image type
+// SPIR-V sampled image type
 class SampledImageType
     : public Type::TypeBase<SampledImageType, SPIRVType, detail::SampledImageTypeStorage> {
 public:
