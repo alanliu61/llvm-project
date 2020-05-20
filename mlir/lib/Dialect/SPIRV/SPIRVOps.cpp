@@ -1079,6 +1079,63 @@ static LogicalResult verify(spirv::BranchConditionalOp branchOp) {
 }
 
 //===----------------------------------------------------------------------===//
+// spv.VectorShuffle
+//===----------------------------------------------------------------------===//
+static ParseResult parseVectorShuffleOp(OpAsmParser &parser,
+                                        OperationState &state) {
+  SmallVector<OpAsmParser::OperandType, 4> operands;
+  Type type;
+  auto loc = parser.getCurrentLocation();
+
+  if (parser.parseOperandList(operands) || parser.parseColonType(type)) {
+    return failure();
+  }
+  auto vectorType = type.dyn_cast<VectorType>();
+  if (!vectorType) {
+    return parser.emitError(
+               loc, "result type must be a composite type, but provided ")
+           << type;
+  }
+
+  return success();
+}
+
+static void print(spirv::VectorShuffleOp vectorShuffleOp,
+                  OpAsmPrinter &printer) {
+  printer << spirv::VectorShuffleOp::getOperationName() << " "
+   << vectorShuffleOp.vector1() << ", " << vectorShuffleOp.vector2()
+   << " " << vectorShuffleOp.components() << " : " 
+   << vectorShuffleOp.result().getType();
+}
+
+static LogicalResult verify(spirv::VectorShuffleOp vectorShuffleOp) {
+  auto resultType = vectorShuffleOp.result().getType();
+
+  //resultType.getShape();
+
+/*
+  SmallVector<Value, 4> constituents(compositeConstructOp.constituents());
+  if (constituents.size() != cType.getNumElements()) {
+    return compositeConstructOp.emitError(
+               "has incorrect number of operands: expected ")
+           << cType.getNumElements() << ", but provided "
+           << constituents.size();
+  }
+
+  for (auto index : llvm::seq<uint32_t>(0, constituents.size())) {
+    if (constituents[index].getType() != cType.getElementType(index)) {
+      return compositeConstructOp.emitError(
+                 "operand type mismatch: expected operand type ")
+             << cType.getElementType(index) << ", but provided "
+             << constituents[index].getType();
+    }
+  }
+*/
+
+  return success();
+}
+
+//===----------------------------------------------------------------------===//
 // spv.CompositeConstruct
 //===----------------------------------------------------------------------===//
 
