@@ -1109,28 +1109,50 @@ static void print(spirv::VectorShuffleOp vectorShuffleOp,
 }
 
 static LogicalResult verify(spirv::VectorShuffleOp vectorShuffleOp) {
-  auto resultType = vectorShuffleOp.result().getType();
+  // check that the result type is a vector type
+  auto resultType = vectorShuffleOp.result().getType().cast<VectorType>();
+  auto components = vectorShuffleOp.components();
 
-  //resultType.getShape();
-
-/*
-  SmallVector<Value, 4> constituents(compositeConstructOp.constituents());
-  if (constituents.size() != cType.getNumElements()) {
-    return compositeConstructOp.emitError(
-               "has incorrect number of operands: expected ")
-           << cType.getNumElements() << ", but provided "
-           << constituents.size();
+  // check that the number of components in the result vector is the same
+  // as the number of component operands
+  if ((int64_t)components.size() != resultType.getNumElements()) {
+    return vectorShuffleOp.emitError(
+        "number of components in result vector must be the same "
+        "as the number of component operands");
   }
 
-  for (auto index : llvm::seq<uint32_t>(0, constituents.size())) {
-    if (constituents[index].getType() != cType.getElementType(index)) {
-      return compositeConstructOp.emitError(
-                 "operand type mismatch: expected operand type ")
-             << cType.getElementType(index) << ", but provided "
-             << constituents[index].getType();
+  // check that both the operands type are indeed vector type
+  auto vec1Type = vectorShuffleOp.vector1().getType().cast<VectorType>();
+  auto vec2Type = vectorShuffleOp.vector2().getType().cast<VectorType>();
+
+  // check that the component type of vector 1 and 2 matches the
+  // component type of the result vector
+  if (vec1Type.getElementType() != vec2Type.getElementType() ||
+      vec1Type.getElementType() != resultType.getElementType()) {
+    return vectorShuffleOp.emitError(
+        "component type of vector 1 and 2 must the same as the "
+        "component type of the result vector type");
+  }
+
+  // check the range on the components literal
+  //auto indices = components.cast<ArrayAttr>;
+  for (auto indexAttr : components) {
+    auto indexIntAttr = indexAttr.dyn_cast<IntegerAttr>();
+    if (!indexIntAttr) {
+      return vectorShuffleOp.emitError(
+        "expected an 32-bit integer for index, but found '")
+        << indexAttr << "'";
+    }
+
+    int64_t totalComponents = vec1Type.getNumElements() + 
+                              vec2Type.getNumElements();
+    int64_t index = indexIntAttr.getInt();
+    if (!(index >= 0 && index < totalComponents)) {
+      return vectorShuffleOp.emitError(
+          "each index must be within the range [0 - N-1] (inclusive) "
+          "where N is the total number of components of vector 1 and 2");
     }
   }
-*/
 
   return success();
 }
