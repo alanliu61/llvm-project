@@ -10,7 +10,6 @@
 //
 //===----------------------------------------------------------------------===//
 
-#include <iostream>
 #include "mlir/Dialect/SPIRV/SPIRVTypes.h"
 #include "mlir/IR/Attributes.h"
 #include "mlir/IR/Identifier.h"
@@ -176,7 +175,6 @@ bool CompositeType::isValid(VectorType type) {
 }
 
 Type CompositeType::getElementType(unsigned index) const {
-  std::cerr << "getting element type =======================" << std::endl;
   switch (getKind()) {
   case spirv::TypeKind::Array:
     return cast<ArrayType>().getElementType();
