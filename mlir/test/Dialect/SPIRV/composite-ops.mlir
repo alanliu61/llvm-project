@@ -1,6 +1,18 @@
 // RUN: mlir-opt -split-input-file -verify-diagnostics %s | FileCheck %s
 
 //===----------------------------------------------------------------------===//
+// spv.VectorShuffle
+//===----------------------------------------------------------------------===//
+
+func @vector_shuffle(%arg0: vector<2xf32>, %arg1: vector<2xf32>) -> vector<3xf32> {
+  // CHECK: spv.VectorShuffle {{%.*}}, {{%.*}}[0 : i32, 1 : i32, 0 : i32] : vector<3xf32>
+  %0 = spv.VectorShuffle %arg0 : vector<2xf32>, %arg1 : vector<2xf32> [0 : i32, 1 : i32, 0 : i32] : vector<3xf32>
+  return %0: vector<3xf32>
+}
+
+// -----
+
+//===----------------------------------------------------------------------===//
 // spv.CompositeConstruct
 //===----------------------------------------------------------------------===//
 

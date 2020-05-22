@@ -1083,27 +1083,64 @@ static LogicalResult verify(spirv::BranchConditionalOp branchOp) {
 //===----------------------------------------------------------------------===//
 static ParseResult parseVectorShuffleOp(OpAsmParser &parser,
                                         OperationState &state) {
-  SmallVector<OpAsmParser::OperandType, 4> operands;
+  SmallVector<OpAsmParser::OperandType, 2> operands;
+  OpAsmParser::OperandType vec1Info;
+  OpAsmParser::OperandType vec2Info;
   Type type;
+  Type type1;
+  Type type2;
   auto loc = parser.getCurrentLocation();
+  Attribute indicesAttr;
 
-  if (parser.parseOperandList(operands) || parser.parseColonType(type)) {
+  if (parser.parseOperand(vec1Info) || 
+      parser.parseColonType(type1) ||
+      parser.parseComma() ||
+      parser.parseOperand(vec2Info) ||
+      parser.parseColonType(type2) ||
+      parser.parseAttribute(indicesAttr, "components", state.attributes) ||
+      parser.parseColonType(type)) {
     return failure();
   }
-  auto vectorType = type.dyn_cast<VectorType>();
-  if (!vectorType) {
+  operands.push_back(vec1Info);
+  operands.push_back(vec2Info);
+
+  auto resultType = type.dyn_cast<VectorType>();
+  if (!resultType) {
     return parser.emitError(
-               loc, "result type must be a composite type, but provided ")
+               loc, "result type must be a vector type, but provided ")
            << type;
   }
+  auto vec1Type = type1.dyn_cast<VectorType>();
+  if (!vec1Type) {
+    return parser.emitError(
+               loc, "vector 1 type must be a vector type, but provided ")
+           << type1;
+  }
+  auto vec2Type = type1.dyn_cast<VectorType>();
+  if (!vec2Type) {
+    return parser.emitError(
+               loc, "vector 2 type must be a vector type, but provided ")
+           << type2;
+  }
 
-  return success();
+  std::cerr << "size: " << operands.size() << std::endl;
+  std::cerr << "vec num element: " << resultType.getNumElements() << std::endl;
+
+  SmallVector<Type, 2> elementTypes;
+  elementTypes.push_back(vec1Type);
+  elementTypes.push_back(vec2Type);
+
+  state.addTypes(type);
+  return parser.resolveOperands(operands, elementTypes, loc, state.operands);
 }
 
 static void print(spirv::VectorShuffleOp vectorShuffleOp,
                   OpAsmPrinter &printer) {
   printer << spirv::VectorShuffleOp::getOperationName() << " "
-   << vectorShuffleOp.vector1() << ", " << vectorShuffleOp.vector2()
+   << vectorShuffleOp.vector1() << " : "
+   << vectorShuffleOp.vector1().getType() << ", "
+   << vectorShuffleOp.vector2() << " : "
+   << vectorShuffleOp.vector2().getType()
    << " " << vectorShuffleOp.components() << " : " 
    << vectorShuffleOp.result().getType();
 }
@@ -1153,7 +1190,6 @@ static LogicalResult verify(spirv::VectorShuffleOp vectorShuffleOp) {
           "where N is the total number of components of vector 1 and 2");
     }
   }
-
   return success();
 }
 
