@@ -99,6 +99,12 @@ static cl::opt<bool> VGPRReserveforSGPRSpill(
     "amdgpu-reserve-vgpr-for-sgpr-spill",
     cl::desc("Allocates one VGPR for future SGPR Spill"), cl::init(true));
 
+static cl::opt<bool> UseDivergentRegisterIndexing(
+  "amdgpu-use-divergent-register-indexing",
+  cl::Hidden,
+  cl::desc("Use indirect register addressing for divergent indexes"),
+  cl::init(false));
+
 static bool hasFP32Denormals(const MachineFunction &MF) {
   const SIMachineFunctionInfo *Info = MF.getInfo<SIMachineFunctionInfo>();
   return Info->getMode().allFP32Denormals();
@@ -4708,6 +4714,7 @@ SDValue SITargetLowering::LowerBRCOND(SDValue BRCOND,
   } else {
     // Get the target from BR if we don't negate the condition
     BR = findUser(BRCOND, ISD::BR);
+    assert(BR && "brcond missing unconditional branch user");
     Target = BR->getOperand(1);
   }
 
@@ -9468,6 +9475,39 @@ SDValue SITargetLowering::performCvtPkRTZCombine(SDNode *N,
   return SDValue();
 }
 
+// Check if EXTRACT_VECTOR_ELT/INSERT_VECTOR_ELT (<n x e>, var-idx) should be
+// expanded into a set of cmp/select instructions.
+static bool shouldExpandVectorDynExt(SDNode *N) {
+  SDValue Idx = N->getOperand(N->getNumOperands() - 1);
+  if (UseDivergentRegisterIndexing || isa<ConstantSDNode>(Idx))
+    return false;
+
+  SDValue Vec = N->getOperand(0);
+  EVT VecVT = Vec.getValueType();
+  EVT EltVT = VecVT.getVectorElementType();
+  unsigned VecSize = VecVT.getSizeInBits();
+  unsigned EltSize = EltVT.getSizeInBits();
+  unsigned NumElem = VecVT.getVectorNumElements();
+
+  // Sub-dword vectors of size 2 dword or less have better implementation.
+  if (VecSize <= 64 && EltSize < 32)
+    return false;
+
+  // Always expand the rest of sub-dword instructions, otherwise it will be
+  // lowered via memory.
+  if (EltSize < 32)
+    return true;
+
+  // Always do this if var-idx is divergent, otherwise it will become a loop.
+  if (Idx->isDivergent())
+    return true;
+
+  // Large vectors would yield too many compares and v_cndmask_b32 instructions.
+  unsigned NumInsts = NumElem /* Number of compares */ +
+                      ((EltSize + 31) / 32) * NumElem /* Number of cndmasks */;
+  return NumInsts <= 16;
+}
+
 SDValue SITargetLowering::performExtractVectorEltCombine(
   SDNode *N, DAGCombinerInfo &DCI) const {
   SDValue Vec = N->getOperand(0);
@@ -9529,12 +9569,7 @@ SDValue SITargetLowering::performExtractVectorEltCombine(
   unsigned EltSize = EltVT.getSizeInBits();
 
   // EXTRACT_VECTOR_ELT (<n x e>, var-idx) => n x select (e, const-idx)
-  // This elminates non-constant index and subsequent movrel or scratch access.
-  // Sub-dword vectors of size 2 dword or less have better implementation.
-  // Vectors of size bigger than 8 dwords would yield too many v_cndmask_b32
-  // instructions.
-  if (VecSize <= 256 && (VecSize > 64 || EltSize >= 32) &&
-      !isa<ConstantSDNode>(N->getOperand(1))) {
+  if (shouldExpandVectorDynExt(N)) {
     SDLoc SL(N);
     SDValue Idx = N->getOperand(1);
     SDValue V;
@@ -9594,17 +9629,10 @@ SITargetLowering::performInsertVectorEltCombine(SDNode *N,
   SDValue Idx = N->getOperand(2);
   EVT VecVT = Vec.getValueType();
   EVT EltVT = VecVT.getVectorElementType();
-  unsigned VecSize = VecVT.getSizeInBits();
-  unsigned EltSize = EltVT.getSizeInBits();
 
   // INSERT_VECTOR_ELT (<n x e>, var-idx)
   // => BUILD_VECTOR n x select (e, const-idx)
-  // This elminates non-constant index and subsequent movrel or scratch access.
-  // Sub-dword vectors of size 2 dword or less have better implementation.
-  // Vectors of size bigger than 8 dwords would yield too many v_cndmask_b32
-  // instructions.
-  if (isa<ConstantSDNode>(Idx) ||
-      VecSize > 256 || (VecSize <= 64 && EltSize < 32))
+  if (!shouldExpandVectorDynExt(N))
     return SDValue();
 
   SelectionDAG &DAG = DCI.DAG;
@@ -10858,9 +10886,67 @@ SITargetLowering::getConstraintType(StringRef Constraint) const {
     case 'v':
     case 'a':
       return C_RegisterClass;
+    case 'A':
+      return C_Other;
     }
   }
   return TargetLowering::getConstraintType(Constraint);
+}
+
+void SITargetLowering::LowerAsmOperandForConstraint(SDValue Op,
+                                                    std::string &Constraint,
+                                                    std::vector<SDValue> &Ops,
+                                                    SelectionDAG &DAG) const {
+  if (Constraint.length() == 1 && Constraint[0] == 'A') {
+    LowerAsmOperandForConstraintA(Op, Ops, DAG);
+  } else {
+    TargetLowering::LowerAsmOperandForConstraint(Op, Constraint, Ops, DAG);
+  }
+}
+
+void SITargetLowering::LowerAsmOperandForConstraintA(SDValue Op,
+                                                     std::vector<SDValue> &Ops,
+                                                     SelectionDAG &DAG) const {
+  unsigned Size = Op.getScalarValueSizeInBits();
+  if (Size > 64)
+    return;
+
+  uint64_t Val;
+  bool IsConst = false;
+  if (ConstantSDNode *C = dyn_cast<ConstantSDNode>(Op)) {
+    Val = C->getSExtValue();
+    IsConst = true;
+  } else if (ConstantFPSDNode *C = dyn_cast<ConstantFPSDNode>(Op)) {
+    Val = C->getValueAPF().bitcastToAPInt().getSExtValue();
+    IsConst = true;
+  } else if (BuildVectorSDNode *V = dyn_cast<BuildVectorSDNode>(Op)) {
+    if (Size != 16 || Op.getNumOperands() != 2)
+      return;
+    if (Op.getOperand(0).isUndef() || Op.getOperand(1).isUndef())
+      return;
+    if (ConstantSDNode *C = V->getConstantSplatNode()) {
+      Val = C->getSExtValue();
+      IsConst = true;
+    } else if (ConstantFPSDNode *C = V->getConstantFPSplatNode()) {
+      Val = C->getValueAPF().bitcastToAPInt().getSExtValue();
+      IsConst = true;
+    }
+  }
+
+  if (IsConst) {
+    bool HasInv2Pi = Subtarget->hasInv2PiInlineImm();
+    if ((Size == 16 && AMDGPU::isInlinableLiteral16(Val, HasInv2Pi)) ||
+        (Size == 32 && AMDGPU::isInlinableLiteral32(Val, HasInv2Pi)) ||
+        (Size == 64 && AMDGPU::isInlinableLiteral64(Val, HasInv2Pi))) {
+      // Clear unused bits of fp constants
+      if (!AMDGPU::isInlinableIntLiteral(Val)) {
+        unsigned UnusedBits = 64 - Size;
+        Val = (Val << UnusedBits) >> UnusedBits;
+      }
+      auto Res = DAG.getTargetConstant(Val, SDLoc(Op), MVT::i64);
+      Ops.push_back(Res);
+    }
+  }
 }
 
 // Figure out which registers should be reserved for stack access. Only after
